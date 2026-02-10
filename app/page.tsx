@@ -5,6 +5,7 @@ import UploadZone from '@/components/UploadZone';
 import DocumentList from '@/components/DocumentList';
 import ChatMessage, { Message } from '@/components/ChatMessage';
 import ChatInput from '@/components/ChatInput';
+import ChatHistory, { ChatSession } from '@/components/ChatHistory';
 
 const STARTER_QUESTIONS = [
   'Summarize this document',
@@ -12,9 +13,42 @@ const STARTER_QUESTIONS = [
   'Show me any tables with financial data',
 ];
 
+const STORAGE_KEY = 'nicerag-chat-sessions';
+
+function loadSessions(): ChatSession[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveSessions(sessions: ChatSession[]) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
+  } catch {
+    // storage full or unavailable
+  }
+}
+
+function titleFromMessages(messages: Message[]): string {
+  const first = messages.find((m) => m.role === 'user');
+  if (!first) return 'New Chat';
+  return first.content.length > 40
+    ? first.content.slice(0, 40) + '...'
+    : first.content;
+}
+
 export default function App() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [historyOpen, setHistoryOpen] = useState(true);
+
+  // Chat session state
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [activeChatId, setActiveChatId] = useState<string | null>(null);
 
   // Chat state
   const [messages, setMessages] = useState<Message[]>([]);
@@ -23,6 +57,37 @@ export default function App() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
+
+  // Load sessions from localStorage on mount
+  useEffect(() => {
+    const loaded = loadSessions();
+    setSessions(loaded);
+  }, []);
+
+  // Persist sessions to localStorage whenever they change
+  useEffect(() => {
+    if (sessions.length > 0) {
+      saveSessions(sessions);
+    }
+  }, [sessions]);
+
+  // Save current messages into the active session whenever messages change
+  useEffect(() => {
+    if (!activeChatId || messages.length === 0) return;
+    // Only save messages that have content (skip empty assistant placeholders)
+    const nonEmpty = messages.filter(
+      (m) => !(m.role === 'assistant' && m.content === ''),
+    );
+    if (nonEmpty.length === 0) return;
+
+    setSessions((prev) =>
+      prev.map((s) =>
+        s.id === activeChatId
+          ? { ...s, messages: nonEmpty, title: titleFromMessages(nonEmpty) }
+          : s,
+      ),
+    );
+  }, [messages, activeChatId]);
 
   useEffect(() => {
     if (autoScroll) {
@@ -47,8 +112,55 @@ export default function App() {
     setSelectedDocIds(readyIds);
   }, []);
 
+  const startNewChat = useCallback(() => {
+    setMessages([]);
+    setActiveChatId(null);
+    setAutoScroll(true);
+  }, []);
+
+  const selectChat = useCallback(
+    (id: string) => {
+      if (isStreaming) return;
+      const session = sessions.find((s) => s.id === id);
+      if (!session) return;
+      setActiveChatId(id);
+      setMessages(session.messages);
+      setAutoScroll(true);
+    },
+    [sessions, isStreaming],
+  );
+
+  const deleteChat = useCallback(
+    (id: string) => {
+      setSessions((prev) => {
+        const updated = prev.filter((s) => s.id !== id);
+        saveSessions(updated);
+        return updated;
+      });
+      if (activeChatId === id) {
+        setMessages([]);
+        setActiveChatId(null);
+      }
+    },
+    [activeChatId],
+  );
+
   const sendMessage = async (text: string) => {
     if (isStreaming) return;
+
+    // If no active chat, create a new session
+    let chatId = activeChatId;
+    if (!chatId) {
+      chatId = Date.now().toString();
+      const newSession: ChatSession = {
+        id: chatId,
+        title: text.length > 40 ? text.slice(0, 40) + '...' : text,
+        messages: [],
+        createdAt: Date.now(),
+      };
+      setSessions((prev) => [newSession, ...prev]);
+      setActiveChatId(chatId);
+    }
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -136,7 +248,7 @@ export default function App() {
 
   return (
     <div className="flex h-screen">
-      {/* Sidebar */}
+      {/* Left Sidebar — Documents */}
       <aside
         className={`flex flex-shrink-0 flex-col border-r border-gray-200 bg-gray-50 transition-[width] duration-300 overflow-hidden ${
           sidebarOpen ? 'w-80' : 'w-0 border-r-0'
@@ -167,8 +279,8 @@ export default function App() {
 
       {/* Main chat area */}
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Top bar with sidebar toggle */}
-        <div className="flex items-center border-b border-gray-200 px-4 py-2">
+        {/* Top bar */}
+        <div className="flex items-center justify-between border-b border-gray-200 px-4 py-2">
           <button
             onClick={() => setSidebarOpen((prev) => !prev)}
             className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
@@ -176,6 +288,15 @@ export default function App() {
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5M3.75 17.25h16.5" />
+            </svg>
+          </button>
+          <button
+            onClick={() => setHistoryOpen((prev) => !prev)}
+            className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+            title={historyOpen ? 'Hide chat history' : 'Show chat history'}
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </button>
         </div>
@@ -234,6 +355,23 @@ export default function App() {
         {/* Input */}
         <ChatInput onSend={sendMessage} disabled={isStreaming} />
       </div>
+
+      {/* Right Sidebar — Chat History */}
+      <aside
+        className={`flex flex-shrink-0 flex-col border-l border-gray-200 bg-gray-50 transition-[width] duration-300 overflow-hidden ${
+          historyOpen ? 'w-72' : 'w-0 border-l-0'
+        }`}
+      >
+        <div className="w-72">
+          <ChatHistory
+            sessions={sessions}
+            activeChatId={activeChatId}
+            onSelectChat={selectChat}
+            onNewChat={startNewChat}
+            onDeleteChat={deleteChat}
+          />
+        </div>
+      </aside>
     </div>
   );
 }
