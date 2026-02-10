@@ -1,0 +1,5 @@
+lib
+node_modules
+processed
+.env
+.DS_Store

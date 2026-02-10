@@ -1,0 +1,1 @@
+{"root":["./src/activities.ts","./src/client.ts","./src/env.ts","./src/worker.ts","./src/workflows.ts","./src/embedding/index.ts","./src/extraction/ai.ts","./src/extraction/index.ts","./src/extraction/lib.ts","./src/extraction/process.ts","./src/extraction/unstructured.ts"],"errors":true,"version":"5.9.3"}
