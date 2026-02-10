@@ -1,6 +1,6 @@
 import { Connection, Client } from '@temporalio/client';
 import { loadClientConnectConfig } from '@temporalio/envconfig';
-import { documentExtraction } from './workflows';
+import { pdfIngestion } from './workflows';
 import { nanoid } from 'nanoid';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -34,10 +34,11 @@ async function run() {
   const connection = await Connection.connect(config.connectionOptions);
   const client = new Client({ connection });
 
-  const workflowId = 'extraction_' + nanoid();
-  const handle = await client.workflow.start(documentExtraction, {
+  const documentId = nanoid();
+  const workflowId = 'ingestion_' + documentId;
+  const handle = await client.workflow.start(pdfIngestion, {
     taskQueue: 'extraction-flow',
-    args: [resolvedPath],
+    args: [{ filePath: resolvedPath, documentId }],
     workflowId,
   });
   console.log(`Started workflow ${workflowId}`);
