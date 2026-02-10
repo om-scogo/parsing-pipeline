@@ -3,20 +3,23 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "tsc --build",
-    "build.watch": "tsc --build --watch",
+    "dev": "next dev",
+    "build:web": "next build",
+    "start:web": "next start",
+    "build": "tsc -p tsconfig.backend.json",
+    "build.watch": "tsc -p tsconfig.backend.json --watch",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
-    "start": "ts-node src/worker.ts",
-    "start.watch": "nodemon src/worker.ts",
-    "workflow": "ts-node src/client.ts",
-    "extract": "ts-node src/extraction/index.ts",
+    "start": "TS_NODE_PROJECT=tsconfig.backend.json ts-node src/worker.ts",
+    "start.watch": "TS_NODE_PROJECT=tsconfig.backend.json nodemon src/worker.ts",
+    "workflow": "TS_NODE_PROJECT=tsconfig.backend.json ts-node src/client.ts",
+    "extract": "TS_NODE_PROJECT=tsconfig.backend.json ts-node src/extraction/index.ts",
     "test": "mocha --exit --require ts-node/register --require source-map-support/register src/mocha/*.test.ts"
   },
   "nodemonConfig": {
     "execMap": {
-      "ts": "ts-node"
+      "ts": "TS_NODE_PROJECT=tsconfig.backend.json ts-node"
     },
     "ext": "ts",
     "watch": [
@@ -38,6 +41,11 @@
     "form-data": "^4.0.5",
     "mongodb": "^7.1.0",
     "nanoid": "3.x",
+    "next": "^16.1.6",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "zod": "^3.25.76"
   },
   "devDependencies": {
@@ -45,14 +53,19 @@
     "@tsconfig/node22": "^22.0.0",
     "@types/mocha": "8.x",
     "@types/node": "^22.9.1",
+    "@types/react": "^19.2.13",
+    "@types/react-dom": "^19.2.3",
     "@typescript-eslint/eslint-plugin": "^8.18.0",
     "@typescript-eslint/parser": "^8.18.0",
+    "autoprefixer": "^10.4.24",
     "eslint": "^8.57.1",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-deprecation": "^3.0.0",
     "mocha": "8.x",
     "nodemon": "^3.1.7",
+    "postcss": "^8.5.6",
     "prettier": "^3.4.2",
+    "tailwindcss": "^3.4.19",
     "ts-node": "^10.9.2",
     "typescript": "^5.6.3"
   }

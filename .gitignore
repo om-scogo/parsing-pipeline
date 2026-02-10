@@ -3,3 +3,6 @@ node_modules
 processed
 .env
 .DS_Store
+.next
+uploads
+next-env.d.ts
