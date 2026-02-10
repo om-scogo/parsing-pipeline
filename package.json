@@ -25,6 +25,7 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.26",
+    "@mastra/core": "^1.2.0",
     "@temporalio/activity": "^1.13.2",
     "@temporalio/client": "^1.13.2",
     "@temporalio/envconfig": "^1.13.2",
@@ -36,7 +37,8 @@
     "dotenv": "^17.2.4",
     "form-data": "^4.0.5",
     "mongodb": "^7.1.0",
-    "nanoid": "3.x"
+    "nanoid": "3.x",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@temporalio/testing": "^1.13.2",
