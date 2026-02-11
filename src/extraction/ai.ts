@@ -1,6 +1,7 @@
 import { createOpenAI, OpenAIProvider } from '@ai-sdk/openai';
+import { createAzure, AzureOpenAIProvider } from '@ai-sdk/azure';
 import { generateText, LanguageModel } from 'ai';
-import { OPENAI_API_KEY, OPENAI_BASE_URL } from "./../env";
+import { OPENAI_API_KEY, OPENAI_BASE_URL, AZURE_OPENAI_CHAT_API_KEY, AZURE_OPENAI_CHAT_ENDPOINT } from "./../env";
 
 const AZURE_MODEL_ID = 'azure-gpt-4o-mini';
 const EMBEDDING_MODEL_ID = 'text-embedding-3-small';
@@ -15,8 +16,22 @@ export function getProvider(): OpenAIProvider {
     });
 }
 
+export function getAzureProvider(): AzureOpenAIProvider {
+    if (!OPENAI_API_KEY) {
+        throw new Error("OPENAI_API_KEY is not set");
+    }
+    return createAzure({
+        apiKey: AZURE_OPENAI_CHAT_API_KEY,
+        baseURL: AZURE_OPENAI_CHAT_ENDPOINT,
+    });
+}
+
 export function getModel(): LanguageModel {
     return getProvider()(AZURE_MODEL_ID);
+}
+
+export function getReasoningModel(): LanguageModel {
+    return getAzureProvider()('gpt-5-mini');
 }
 
 /**
