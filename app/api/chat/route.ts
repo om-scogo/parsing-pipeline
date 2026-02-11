@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import '../../../src/env';
 import { ragAgent } from '@/src/agent';
 import { getWebDocument } from '@/src/db/webDocuments';
-import { ensureChat, updateChatTitle, saveMessage, getMessages } from '@/src/db/chatMemory';
 
 const PREVIEW_LENGTH = 120;
 
@@ -73,17 +72,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'chatId is required' }, { status: 400 });
     }
 
-    // Ensure chat exists in DB
-    await ensureChat(chatId, message.length > 40 ? message.slice(0, 40) + '...' : message);
-
-    // Save user message to DB
-    await saveMessage(chatId, 'user', message);
-
-    // Load conversation history from DB (includes the message we just saved)
-    const history = await getMessages(chatId);
-    // Exclude the last message (current one) — we'll add it separately
-    const priorMessages = history.slice(0, -1);
-
     // Resolve frontend document IDs to ingestion document IDs
     const ingestionIds: string[] = [];
     if (documentIds?.length) {
@@ -95,61 +83,32 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Build prompt with context
-    let prompt = `You are Nice RAG, a document research assistant with access to a knowledge base of processed documents. Your job is to find accurate, complete answers to user questions by searching through text content, tables, and images from these documents.
-
-## How to Search
-
-- Start with a broad search using 'searchDocuments' to understand what's available
-- If the initial results suggest table data would help, follow up with 'searchByType' filtered to "table"
-- If the user asks about charts, diagrams, or visual content, search with type "image"
-- If a result looks promising but needs more context, use 'getDocumentContext' to see surrounding content
-- Reformulate your search query if initial results aren't relevant — try synonyms, related terms, or more specific phrasing
-- Do multiple searches when the question is complex or spans multiple topics
-- Use 'listDocuments' to see what documents are available when the user asks about the collection or a specific document
-
-## How to Respond
-- If you cannot find sufficient information to answer the question, say so clearly. Do not make up information.
-- If results are ambiguous or conflicting across documents, present both perspectives with their sources.`;
-
-
-    // Add document scope context if specific documents selected
+    // Build the user message — add document scope if needed
+    let prompt = message;
     if (ingestionIds.length > 0) {
-      prompt += `[Context: The user has selected specific documents. When using search tools, filter results to these document IDs: ${ingestionIds.join(', ')}. Always use the documentId parameter in your tool calls.]\n\n`;
+      prompt += `\n\n[Context: The user has selected specific documents. When using search tools, filter results to these document IDs: ${ingestionIds.join(', ')}. Always use the documentId parameter in your tool calls.]`;
     }
 
-    // Add conversation history from DB
-    if (priorMessages.length > 0) {
-      for (const msg of priorMessages) {
-        const prefix = msg.role === 'user' ? 'User' : 'Assistant';
-        prompt += `${prefix}: ${msg.content}\n\n`;
-      }
-    }
+    // Stream the response — Mastra memory handles history via thread/resource
+    const stream = await ragAgent.stream(prompt, {
+      maxSteps: 10,
+      memory: {
+        thread: chatId,
+        resource: 'default',
+      },
+    });
 
-    // Add current message
-    prompt += message;
-
-    console.log("--------------------------------");
-    console.log("[prompt] Prompt:", prompt);
-    console.log("--------------------------------");
-
-    // Stream the response
-    const stream = await ragAgent.stream(prompt, { maxSteps: 10 });
-
-    let fullAssistantText = '';
     const encoder = new TextEncoder();
     const readable = new ReadableStream({
       async start(controller) {
         try {
           for await (const chunk of stream.fullStream) {
             if (chunk.type === 'text-delta') {
-              fullAssistantText += chunk.payload.text;
               controller.enqueue(
                 encoder.encode(`data: ${JSON.stringify({ type: 'text', content: chunk.payload.text })}\n\n`),
               );
             } else if (chunk.type === 'tool-call') {
               const { toolCallId, toolName, args } = chunk.payload;
-              // Strip internal metadata from args before sending to client
               const cleanArgs = args
                 ? Object.fromEntries(Object.entries(args).filter(([k]) => !k.startsWith('__')))
                 : {};
@@ -168,15 +127,6 @@ export async function POST(request: NextRequest) {
               controller.enqueue(
                 encoder.encode(`data: ${JSON.stringify({ type: 'error', content: 'An error occurred' })}\n\n`),
               );
-            }
-          }
-
-          // Save assistant response to DB after streaming completes
-          if (fullAssistantText.trim()) {
-            await saveMessage(chatId, 'assistant', fullAssistantText);
-            // Update chat title from first user message if this is the first exchange
-            if (priorMessages.length === 0) {
-              await updateChatTitle(chatId, message.length > 40 ? message.slice(0, 40) + '...' : message);
             }
           }
         } catch (err) {
