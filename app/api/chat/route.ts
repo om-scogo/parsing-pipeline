@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import '../../../src/env';
 import { ragAgent } from '@/src/agent';
-import { getWebDocument } from '@/src/db/webDocuments';
 
 const PREVIEW_LENGTH = 120;
 
@@ -10,8 +9,8 @@ function summarizeToolResult(result: unknown): unknown {
   if (!result || typeof result !== 'object') return result;
   const obj = result as Record<string, unknown>;
 
-  // searchDocuments / searchByType — { results: [...], count }
-  if (Array.isArray(obj.results)) {
+  // search — { results: [...], count, queriesUsed }
+  if (Array.isArray(obj.results) && 'count' in obj) {
     return {
       count: obj.count ?? obj.results.length,
       items: (obj.results as Record<string, unknown>[]).map((r) => ({
@@ -40,13 +39,25 @@ function summarizeToolResult(result: unknown): unknown {
     };
   }
 
-  // getDocumentContext — { targetChunk, context: [...], pageRange }
-  if ('targetChunk' in obj && Array.isArray(obj.context)) {
-    const target = obj.targetChunk as Record<string, unknown> | null;
+  // lookupPages — { documentId, sourceFile, pages: [...], totalChunks }
+  if (Array.isArray(obj.pages) && 'totalChunks' in obj) {
     return {
-      pageRange: obj.pageRange,
-      targetFile: target ? (target.metadata as Record<string, unknown>)?.sourceFile : null,
-      contextCount: (obj.context as unknown[]).length,
+      sourceFile: obj.sourceFile,
+      totalChunks: obj.totalChunks,
+      pageCount: (obj.pages as unknown[]).length,
+    };
+  }
+
+  // getTableData — { chunkId, tableMarkdown, columns, rowCount, ... }
+  if ('tableMarkdown' in obj && 'columns' in obj) {
+    return {
+      sourceFile: obj.sourceFile,
+      pageNumber: obj.pageNumber,
+      columns: obj.columns,
+      rowCount: obj.rowCount,
+      preview: typeof obj.summary === 'string'
+        ? obj.summary.slice(0, PREVIEW_LENGTH) + (obj.summary.length > PREVIEW_LENGTH ? '...' : '')
+        : null,
     };
   }
 
@@ -59,10 +70,9 @@ function summarizeToolResult(result: unknown): unknown {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { message, chatId, documentIds } = body as {
+    const { message, chatId } = body as {
       message: string;
       chatId: string;
-      documentIds?: string[];
     };
 
     if (!message?.trim()) {
@@ -72,25 +82,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'chatId is required' }, { status: 400 });
     }
 
-    // Resolve frontend document IDs to ingestion document IDs
-    const ingestionIds: string[] = [];
-    if (documentIds?.length) {
-      for (const id of documentIds) {
-        const doc = await getWebDocument(id);
-        if (doc?.ingestionDocumentId) {
-          ingestionIds.push(doc.ingestionDocumentId);
-        }
-      }
-    }
-
-    // Build the user message — add document scope if needed
-    let prompt = message;
-    if (ingestionIds.length > 0) {
-      prompt += `\n\n[Context: The user has selected specific documents. When using search tools, filter results to these document IDs: ${ingestionIds.join(', ')}. Always use the documentId parameter in your tool calls.]`;
-    }
-
     // Stream the response — Mastra memory handles history via thread/resource
-    const stream = await ragAgent.stream(prompt, {
+    const stream = await ragAgent.stream(message, {
       maxSteps: 10,
       memory: {
         thread: chatId,

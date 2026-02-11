@@ -5,12 +5,9 @@ import DocumentCard, { DocumentData } from './DocumentCard';
 
 interface DocumentListProps {
   refreshKey: number;
-  selectedDocIds: string[];
-  onToggleSelect: (id: string) => void;
-  onDocumentsLoaded: (readyIds: string[]) => void;
 }
 
-export default function DocumentList({ refreshKey, selectedDocIds, onToggleSelect, onDocumentsLoaded }: DocumentListProps) {
+export default function DocumentList({ refreshKey }: DocumentListProps) {
   const [documents, setDocuments] = useState<DocumentData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -23,16 +20,12 @@ export default function DocumentList({ refreshKey, selectedDocIds, onToggleSelec
       setDocuments(data);
       setError(null);
 
-      const readyIds = data
-        .filter((d: DocumentData) => d.status === 'ready')
-        .map((d: DocumentData) => d.id);
-      onDocumentsLoaded(readyIds);
     } catch {
       setError('Failed to load documents');
     } finally {
       setLoading(false);
     }
-  }, [onDocumentsLoaded]);
+  }, []);
 
   useEffect(() => {
     fetchDocuments();
@@ -59,10 +52,6 @@ export default function DocumentList({ refreshKey, selectedDocIds, onToggleSelec
                   : d,
               ),
             );
-            // If it just became ready, auto-select it
-            if (status.status === 'ready') {
-              onToggleSelect(doc.id);
-            }
           }
         } catch {
           // skip
@@ -71,7 +60,7 @@ export default function DocumentList({ refreshKey, selectedDocIds, onToggleSelec
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [documents, onToggleSelect]);
+  }, [documents]);
 
   const handleDelete = (id: string) => {
     setDocuments((prev) => prev.filter((d) => d.id !== id));
@@ -113,8 +102,6 @@ export default function DocumentList({ refreshKey, selectedDocIds, onToggleSelec
         <DocumentCard
           key={doc.id}
           document={doc}
-          selected={selectedDocIds.includes(doc.id)}
-          onToggleSelect={onToggleSelect}
           onDelete={handleDelete}
         />
       ))}

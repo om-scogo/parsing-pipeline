@@ -25,7 +25,6 @@ export default function App() {
 
   // Chat state
   const [messages, setMessages] = useState<Message[]>([]);
-  const [selectedDocIds, setSelectedDocIds] = useState<string[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -61,16 +60,6 @@ export default function App() {
     if (!el) return;
     const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
     setAutoScroll(isNearBottom);
-  }, []);
-
-  const handleToggleSelect = useCallback((id: string) => {
-    setSelectedDocIds((prev) =>
-      prev.includes(id) ? prev.filter((d) => d !== id) : [...prev, id],
-    );
-  }, []);
-
-  const handleDocumentsLoaded = useCallback((readyIds: string[]) => {
-    setSelectedDocIds(readyIds);
   }, []);
 
   const startNewChat = useCallback(() => {
@@ -160,7 +149,6 @@ export default function App() {
         body: JSON.stringify({
           message: text,
           chatId,
-          documentIds: selectedDocIds.length > 0 ? selectedDocIds : undefined,
         }),
       });
 
@@ -271,9 +259,6 @@ export default function App() {
           <div className="flex-1 overflow-y-auto p-4">
             <DocumentList
               refreshKey={refreshKey}
-              selectedDocIds={selectedDocIds}
-              onToggleSelect={handleToggleSelect}
-              onDocumentsLoaded={handleDocumentsLoaded}
             />
           </div>
         </div>

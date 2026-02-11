@@ -5,8 +5,8 @@ import { getDocumentsCollection } from '../../embedding';
 export const listDocuments = createTool({
   id: 'list-documents',
   description:
-    'List available documents in the knowledge base. ' +
-    'Returns document IDs, filenames, and chunk counts per type. ' +
+    'List available documents in the knowledge base with content previews. ' +
+    'Returns document IDs, filenames, chunk counts per type, and a brief content preview. ' +
     'Use this to understand what documents are available before searching.',
   inputSchema: z.object({
     limit: z
@@ -27,6 +27,7 @@ export const listDocuments = createTool({
         tableChunks: z.number(),
         imageChunks: z.number(),
         totalChunks: z.number(),
+        preview: z.string(),
       }),
     ),
     totalDocuments: z.number(),
@@ -38,9 +39,9 @@ export const listDocuments = createTool({
       console.log("--------------------------------");
       const collection = await getDocumentsCollection();
 
-      // Fetch all metadatas to aggregate by document
+      // Fetch all metadatas + documents to aggregate by document
       const results = await collection.get({
-        include: ['metadatas'],
+        include: ['metadatas', 'documents'],
       });
 
       if (!results.ids?.length) {
@@ -55,27 +56,37 @@ export const listDocuments = createTool({
           textChunks: number;
           tableChunks: number;
           imageChunks: number;
+          preview: string;
         }
       >();
 
-      for (const meta of results.metadatas ?? []) {
+      const metadatas = results.metadatas ?? [];
+      const chromaDocs = results.documents ?? [];
+
+      for (let i = 0; i < metadatas.length; i++) {
+        const meta = metadatas[i];
         if (!meta) continue;
         const docId = String(meta.document_id || 'unknown');
         const sourceFile = String(meta.source_file || 'unknown');
         const type = String(meta.type || 'text');
 
         if (!docMap.has(docId)) {
-          docMap.set(docId, { sourceFile, textChunks: 0, tableChunks: 0, imageChunks: 0 });
+          docMap.set(docId, { sourceFile, textChunks: 0, tableChunks: 0, imageChunks: 0, preview: '' });
         }
 
         const doc = docMap.get(docId)!;
-        if (type === 'text') doc.textChunks++;
-        else if (type === 'table') doc.tableChunks++;
+        if (type === 'text') {
+          doc.textChunks++;
+          // Use the first text chunk's content as preview
+          if (!doc.preview && chromaDocs[i]) {
+            doc.preview = String(chromaDocs[i]).slice(0, 200);
+          }
+        } else if (type === 'table') doc.tableChunks++;
         else if (type === 'image') doc.imageChunks++;
       }
 
       // Convert to array and apply limit
-      const documents = Array.from(docMap.entries())
+      const docList = Array.from(docMap.entries())
         .slice(0, limit ?? 50)
         .map(([documentId, info]) => ({
           documentId,
@@ -84,10 +95,11 @@ export const listDocuments = createTool({
           tableChunks: info.tableChunks,
           imageChunks: info.imageChunks,
           totalChunks: info.textChunks + info.tableChunks + info.imageChunks,
+          preview: info.preview,
         }));
 
       return {
-        documents,
+        documents: docList,
         totalDocuments: docMap.size,
       };
     } catch (err) {

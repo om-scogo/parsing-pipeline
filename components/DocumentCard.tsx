@@ -13,12 +13,10 @@ export interface DocumentData {
 
 interface DocumentCardProps {
   document: DocumentData;
-  selected: boolean;
-  onToggleSelect: (id: string) => void;
   onDelete: (id: string) => void;
 }
 
-export default function DocumentCard({ document, selected, onToggleSelect, onDelete }: DocumentCardProps) {
+export default function DocumentCard({ document, onDelete }: DocumentCardProps) {
   const [showConfirm, setShowConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -47,31 +45,10 @@ export default function DocumentCard({ document, selected, onToggleSelect, onDel
 
   return (
     <div
-      onClick={() => isReady && onToggleSelect(document.id)}
-      className={`rounded-lg border p-3 transition-colors ${
-        isReady ? 'cursor-pointer' : ''
-      } ${
-        selected
-          ? 'border-blue-500 bg-blue-50'
-          : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-      }`}
+      className="rounded-lg border border-gray-200 p-3 transition-colors hover:border-gray-300 hover:bg-gray-50"
     >
       <div className="flex items-start justify-between">
         <div className="flex min-w-0 flex-1 items-start gap-2">
-          {/* Checkbox */}
-          {isReady && (
-            <div className={`mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border transition-colors ${
-              selected
-                ? 'border-blue-500 bg-blue-500'
-                : 'border-gray-300'
-            }`}>
-              {selected && (
-                <svg className="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                </svg>
-              )}
-            </div>
-          )}
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium text-gray-800">{document.fileName}</p>
             <p className="mt-0.5 text-xs text-gray-400">{formattedDate}</p>
