@@ -47,6 +47,9 @@ export const searchByType = createTool({
   }),
   execute: async ({ query, chunkType, topK, documentId }) => {
     try {
+      console.log("--------------------------------");
+      console.log("[searchByType] Searching by type:", chunkType);
+      console.log("--------------------------------");
       const where: Where = documentId
         ? { $and: [{ type: chunkType }, { document_id: documentId }] }
         : { type: chunkType };

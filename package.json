@@ -28,6 +28,7 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.26",
+    "@libsql/client": "^0.17.0",
     "@mastra/core": "^1.2.0",
     "@temporalio/activity": "^1.13.2",
     "@temporalio/client": "^1.13.2",

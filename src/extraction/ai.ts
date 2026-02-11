@@ -32,9 +32,30 @@ export function getEmbeddingModel(): any {
  * Generates a short searchable summary of a table (from text or HTML) for indexing/search.
  */
 export async function generateTableSummary(tableContent: string): Promise<string> {
+    console.log("Generating table summary for content:", tableContent.slice(0, 8000));
+    const prompt = `You are a data analyst summarizing a table for a search index.
+
+## Input
+The following is an HTML representation of a table extracted from a spreadsheet (CSV/XLSX).
+
+## Task
+Write a concise summary (4-6 sentences) that covers:
+1. **Subject**: What is this table about? (e.g., "Monthly sales by region", "Student enrollment data")
+2. **Structure**: How many rows/columns, and what are the key column headers?
+3. **Key columns & data types**: Name the most important columns and what kind of data they hold (dates, currency, categories, metrics, etc.)
+4. **Context clues**: If the table contains units, currency symbols, country names, or domain-specific terms, mention them explicitly.
+
+## Rules
+- Write in plain natural language — no HTML, no markdown tables, no bullet points.
+- Prefer specific names, numbers, and terms from the data over generic descriptions.
+- If the table is truncated, say so and summarize only what is visible.
+- Do NOT fabricate data that isn't present in the table.
+
+## Table content:
+${tableContent.slice(0, 8000)}`;
     const { text } = await generateText({
         model: getModel(),
-        prompt: `You are given the content of a table in HTML format. Write a concise, searchable summary in 4-5 sentences that captures the main subject, key columns, and notable values. Use natural language so the summary can be used for search. Do not include HTML.\n\nTable content:\n${tableContent.slice(0, 8000)}`,
+        prompt: prompt,
     });
     return text.trim();
 }

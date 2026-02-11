@@ -33,6 +33,9 @@ export const listDocuments = createTool({
   }),
   execute: async ({ limit }) => {
     try {
+      console.log("--------------------------------");
+      console.log("[listDocuments] Listing documents");
+      console.log("--------------------------------");
       const collection = await getDocumentsCollection();
 
       // Fetch all metadatas to aggregate by document

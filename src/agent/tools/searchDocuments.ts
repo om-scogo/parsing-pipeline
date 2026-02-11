@@ -40,6 +40,9 @@ export const searchDocuments = createTool({
   }),
   execute: async ({ query, topK, documentId }) => {
     try {
+      console.log("--------------------------------");
+      console.log("[searchDocuments] Searching documents");
+      console.log("--------------------------------");
       const where: Where | undefined = documentId
         ? { document_id: documentId }
         : undefined;

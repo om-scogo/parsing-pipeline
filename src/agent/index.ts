@@ -5,6 +5,7 @@ import { searchDocuments } from './tools/searchDocuments';
 import { searchByType } from './tools/searchByType';
 import { getDocumentContext } from './tools/getDocumentContext';
 import { listDocuments } from './tools/listDocuments';
+import { getModel } from '../extraction/ai'
 
 /**
  * RAG agent for querying processed PDF documents.
@@ -20,15 +21,11 @@ export const ragAgent = new Agent({
   id: 'document-research-agent',
   name: 'Document Research Agent',
   instructions: SYSTEM_PROMPT,
-  model: {
-    id: 'openai/azure-gpt-4o-mini',
-    apiKey: OPENAI_API_KEY!,
-    url: OPENAI_BASE_URL!,
-  },
+  model: getModel() as any,
   tools: {
     searchDocuments,
     searchByType,
     getDocumentContext,
     listDocuments,
-  },
+  }
 });

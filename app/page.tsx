@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { nanoid } from 'nanoid';
 import UploadZone from '@/components/UploadZone';
 import DocumentList from '@/components/DocumentList';
-import ChatMessage, { Message } from '@/components/ChatMessage';
+import ChatMessage, { Message, ToolCallInfo } from '@/components/ChatMessage';
 import ChatInput from '@/components/ChatInput';
 import ChatHistory, { ChatSession } from '@/components/ChatHistory';
 
@@ -12,34 +13,6 @@ const STARTER_QUESTIONS = [
   'What are the key findings?',
   'Show me any tables with financial data',
 ];
-
-const STORAGE_KEY = 'nicerag-chat-sessions';
-
-function loadSessions(): ChatSession[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveSessions(sessions: ChatSession[]) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
-  } catch {
-    // storage full or unavailable
-  }
-}
-
-function titleFromMessages(messages: Message[]): string {
-  const first = messages.find((m) => m.role === 'user');
-  if (!first) return 'New Chat';
-  return first.content.length > 40
-    ? first.content.slice(0, 40) + '...'
-    : first.content;
-}
 
 export default function App() {
   const [refreshKey, setRefreshKey] = useState(0);
@@ -58,36 +31,24 @@ export default function App() {
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
 
-  // Load sessions from localStorage on mount
+  // Load chat sessions from backend on mount
   useEffect(() => {
-    const loaded = loadSessions();
-    setSessions(loaded);
+    fetch('/api/chats')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.chats) {
+          setSessions(
+            data.chats.map((c: { id: string; title: string; createdAt: string }) => ({
+              id: c.id,
+              title: c.title,
+              messages: [],
+              createdAt: new Date(c.createdAt).getTime(),
+            })),
+          );
+        }
+      })
+      .catch(() => {});
   }, []);
-
-  // Persist sessions to localStorage whenever they change
-  useEffect(() => {
-    if (sessions.length > 0) {
-      saveSessions(sessions);
-    }
-  }, [sessions]);
-
-  // Save current messages into the active session whenever messages change
-  useEffect(() => {
-    if (!activeChatId || messages.length === 0) return;
-    // Only save messages that have content (skip empty assistant placeholders)
-    const nonEmpty = messages.filter(
-      (m) => !(m.role === 'assistant' && m.content === ''),
-    );
-    if (nonEmpty.length === 0) return;
-
-    setSessions((prev) =>
-      prev.map((s) =>
-        s.id === activeChatId
-          ? { ...s, messages: nonEmpty, title: titleFromMessages(nonEmpty) }
-          : s,
-      ),
-    );
-  }, [messages, activeChatId]);
 
   useEffect(() => {
     if (autoScroll) {
@@ -119,24 +80,38 @@ export default function App() {
   }, []);
 
   const selectChat = useCallback(
-    (id: string) => {
+    async (id: string) => {
       if (isStreaming) return;
-      const session = sessions.find((s) => s.id === id);
-      if (!session) return;
       setActiveChatId(id);
-      setMessages(session.messages);
       setAutoScroll(true);
+
+      // Load messages from backend
+      try {
+        const res = await fetch(`/api/chat/${id}`);
+        const data = await res.json();
+        if (data.messages) {
+          setMessages(
+            data.messages.map((m: { role: string; content: string }, i: number) => ({
+              id: `${id}-${i}`,
+              role: m.role as 'user' | 'assistant',
+              content: m.content,
+            })),
+          );
+        }
+      } catch {
+        setMessages([]);
+      }
     },
-    [sessions, isStreaming],
+    [isStreaming],
   );
 
   const deleteChat = useCallback(
-    (id: string) => {
-      setSessions((prev) => {
-        const updated = prev.filter((s) => s.id !== id);
-        saveSessions(updated);
-        return updated;
-      });
+    async (id: string) => {
+      // Delete from backend
+      try {
+        await fetch(`/api/chat/${id}`, { method: 'DELETE' });
+      } catch {}
+      setSessions((prev) => prev.filter((s) => s.id !== id));
       if (activeChatId === id) {
         setMessages([]);
         setActiveChatId(null);
@@ -148,10 +123,10 @@ export default function App() {
   const sendMessage = async (text: string) => {
     if (isStreaming) return;
 
-    // If no active chat, create a new session
+    // If no active chat, create a new session with a unique ID
     let chatId = activeChatId;
     if (!chatId) {
-      chatId = Date.now().toString();
+      chatId = nanoid();
       const newSession: ChatSession = {
         id: chatId,
         title: text.length > 40 ? text.slice(0, 40) + '...' : text,
@@ -163,7 +138,7 @@ export default function App() {
     }
 
     const userMessage: Message = {
-      id: Date.now().toString(),
+      id: nanoid(),
       role: 'user',
       content: text,
     };
@@ -172,22 +147,20 @@ export default function App() {
     setIsStreaming(true);
     setAutoScroll(true);
 
-    const assistantId = (Date.now() + 1).toString();
+    const assistantId = nanoid();
     setMessages((prev) => [
       ...prev,
       { id: assistantId, role: 'assistant', content: '' },
     ]);
 
     try {
-      const history = messages.map((m) => ({ role: m.role, content: m.content }));
-
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: text,
+          chatId,
           documentIds: selectedDocIds.length > 0 ? selectedDocIds : undefined,
-          conversationHistory: history.length > 0 ? history : undefined,
         }),
       });
 
@@ -216,6 +189,35 @@ export default function App() {
                 prev.map((m) =>
                   m.id === assistantId
                     ? { ...m, content: m.content + data.content }
+                    : m,
+                ),
+              );
+            } else if (data.type === 'tool-call') {
+              const tc: ToolCallInfo = {
+                id: data.toolCallId,
+                toolName: data.toolName,
+                args: data.args ?? {},
+                status: 'calling',
+              };
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantId
+                    ? { ...m, toolCalls: [...(m.toolCalls || []), tc] }
+                    : m,
+                ),
+              );
+            } else if (data.type === 'tool-result') {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantId
+                    ? {
+                        ...m,
+                        toolCalls: (m.toolCalls || []).map((tc) =>
+                          tc.id === data.toolCallId
+                            ? { ...tc, status: 'completed' as const, result: data.result }
+                            : tc,
+                        ),
+                      }
                     : m,
                 ),
               );
@@ -329,12 +331,12 @@ export default function App() {
             ) : (
               <>
                 {messages.map((msg) =>
-                  msg.role === 'assistant' && msg.content === '' ? null : (
+                  msg.role === 'assistant' && msg.content === '' && !(msg.toolCalls?.length) ? null : (
                     <ChatMessage key={msg.id} message={msg} />
                   ),
                 )}
 
-                {isStreaming && messages[messages.length - 1]?.content === '' && (
+                {isStreaming && messages[messages.length - 1]?.content === '' && !(messages[messages.length - 1]?.toolCalls?.length) && (
                   <div className="flex justify-start">
                     <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
                       <div className="flex gap-1">

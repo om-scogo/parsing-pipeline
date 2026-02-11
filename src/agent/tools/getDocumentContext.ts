@@ -48,6 +48,9 @@ export const getDocumentContext = createTool({
   execute: async ({ chunkId, windowSize }) => {
     try {
       // Fetch the target chunk
+      console.log("--------------------------------");
+      console.log("[getDocumentContext] Fetching target chunk for chunkId:", chunkId);
+      console.log("--------------------------------");
       const [targetChunk] = await getChromaChunksByIds([chunkId]);
       if (!targetChunk) {
         return {
