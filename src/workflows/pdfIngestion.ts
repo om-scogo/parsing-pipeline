@@ -75,7 +75,7 @@ export async function pdfIngestion(input: PdfIngestionInput) {
 
   // Step 4: Chunk cleaned text
   console.log('Step 4: Chunking text');
-  await chunkText(documentId, chunkSize ?? 600, chunkOverlap ?? 80);
+  await chunkText(documentId);
 
   // Step 5 & 6: Process tables and images in parallel
   console.log('Step 5/6: Processing tables and images');
